@@ -60,7 +60,7 @@ def loadStream(stream_id: str) -> Dict[str, Any]:
         stream_id (str): Stream ID
 
     Returns:
-        Dict[str, Any]: Deserialized sale object
+        Dict[str, Any]: Deserialized stream object
     """    
     s = get('streams/' + stream_id)
     assert len(s) > 0, 'no such stream exists'
