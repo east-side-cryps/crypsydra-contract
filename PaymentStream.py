@@ -35,14 +35,14 @@ on_transfer = Nep17TransferEvent
 
 on_create = CreateNewEvent(
     [
-        ('stream', str),
+        ('stream', str)
     ],
     'StreamCreated'
 )
 
 on_complete = CreateNewEvent(
     [
-        ('stream_id', int),
+        ('stream_id', int)
     ],
     'StreamCompleted'
 )
@@ -50,6 +50,7 @@ on_complete = CreateNewEvent(
 on_cancel = CreateNewEvent(
     [
         ('stream_id', int),
+        ('requester', str)
     ],
     'StreamCanceled'
 )
@@ -57,7 +58,7 @@ on_withdraw = CreateNewEvent(
     [
         ('stream_id', int),
         ('requester', str),
-        ('amount', int),
+        ('amount', int)
     ],
     'Withdraw'
 )
@@ -158,6 +159,7 @@ def getAmountAvailableForWithdrawal(stream: Dict[str, Any]) -> int:
         elapsed_seconds = (current_time - start_time) // 1000
         return rate * elapsed_seconds
 
+
 # public functions
 
 @public
@@ -236,13 +238,14 @@ def withdraw(stream_id: int, amount: int) -> bool:
     stream = loadStream(stream_id)
     recipient = base64_decode(cast(str,stream['recipient']))
     sender = base64_decode(cast(str, stream['sender']))
+    requester = ""
     if check_witness(recipient):
         print("Recipient requesting withdrawal")
-        requester = stream['recipient']
+        requester = cast(str, stream['recipient'])
     elif check_witness(sender):
         # TODO: should sender be able to request an advance to recipient?
         print("Sender requesting withdrawal to recipient")
-        requester = stream['sender']
+        requester = cast(str, stream['sender'])
     else:
         print("Must be sender or recipient to withdraw")
         abort()
@@ -250,6 +253,7 @@ def withdraw(stream_id: int, amount: int) -> bool:
     remaining = cast(int, stream['remaining'])
     available = getAmountAvailableForWithdrawal(stream)
 
+    assert amount > 0, 'nothing to do'
     assert available >= amount, 'withdrawal amount exceeds available funds'
 
     stream['remaining'] = remaining - amount
@@ -258,11 +262,12 @@ def withdraw(stream_id: int, amount: int) -> bool:
 
     if cast(int, stream['remaining']) == 0:
         deleteStream(stream)
-        on_complete(cast(int, stream['id']))
+        on_complete(stream_id)
     else:
         put(b'streams/' + cast(bytes, stream['id']), json_serialize(stream))
 
-    on_withdraw(cast(int, stream['id']), cast(str, requester), amount)
+
+    on_withdraw(stream_id, requester, amount)
     return True
 
 
@@ -282,10 +287,12 @@ def cancelStream(stream_id: int) -> bool:
     stream = loadStream(stream_id)
     recipient = base64_decode(cast(str,stream['recipient']))
     sender = base64_decode(cast(str, stream['sender']))
+    requester = ''
+
     if check_witness(recipient):
-        print("Recipient requesting cancellation of stream")
+        requester = cast(str, stream['recipient'])
     elif check_witness(sender):
-        print("Sender requesting cancellation of stream")
+        requester = cast(str, stream['sender'])
     else:
         print("Must be sender or recipient to cancel stream")
         abort()
@@ -293,12 +300,14 @@ def cancelStream(stream_id: int) -> bool:
     available = getAmountAvailableForWithdrawal(stream)
     remaining = cast(int, stream['remaining']) - available
 
-    call_contract(GAS, 'transfer', [executing_script_hash, recipient, available, None])
-    call_contract(GAS, 'transfer', [executing_script_hash, sender, remaining, None])
+    if available > 0:
+        call_contract(GAS, 'transfer', [executing_script_hash, recipient, available, None])
+
+    if remaining > 0:
+        call_contract(GAS, 'transfer', [executing_script_hash, sender, remaining, None])
 
     deleteStream(stream)
-    on_cancel(cast(int, stream['id']))
-
+    on_cancel(stream_id, requester)
     return True
 
 
