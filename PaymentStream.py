@@ -63,10 +63,6 @@ on_withdraw = CreateNewEvent(
 
 # private functions
 
-def concat(a: str, b: str) -> str:
-    return a + b
-
-
 def newStream() -> Dict[str, Any]:
     """
     Create an empty stream object with the next ID in the sequence
@@ -80,17 +76,17 @@ def newStream() -> Dict[str, Any]:
     return stream
 
 
-def loadStream(stream_id: str) -> Dict[str, Any]:
+def loadStream(stream_id: int) -> Dict[str, Any]:
     """
     Load and deserialize a stream object from storage
 
     Args:
-        stream_id (str): Stream ID
+        stream_id (int): Stream ID
 
     Returns:
         Dict[str, Any]: Deserialized stream object
     """    
-    s = get('streams/' + stream_id)
+    s = get(b'streams/' + stream_id.to_bytes())
     assert len(s) > 0, 'no such stream exists'
     stream: Dict[str, Any] = json_deserialize(s)
     assert stream, 'stream deserialization failure'
@@ -98,11 +94,42 @@ def loadStream(stream_id: str) -> Dict[str, Any]:
 
 
 def deleteStream(stream: Dict[str, Any]):
-        delete(concat('streams/', cast(str, stream['id'])))
-        sender_key = concat(cast(str, stream['sender']), cast(str, stream['id']))
-        recipient_key = concat(cast(str, stream['recipient']), cast(str, stream['id']))
-        delete(concat('bysender/', sender_key))
-        delete(concat('byrecipient/', recipient_key))
+    """
+    Delete a stream from storage
+
+    Args:
+        stream (Dict[str, Any]): Stream object
+    """    
+    b_id = cast(bytes, stream['id'])
+
+    delete(b'streams/' + b_id)
+
+    sender_key = cast(bytes, stream['sender']) + b':' + b_id
+    recipient_key = cast(bytes, stream['recipient']) + b':' + b_id
+
+    delete(b'bysender/' + sender_key)
+    delete(b'byrecipient/' + recipient_key)
+
+
+def saveStream(stream: Dict[str, Any]):
+    """
+    Save a string to storage and trigger on_create event
+
+    Args:
+        stream (Dict[str, Any]): Stream object
+    """    
+    b_id = cast(bytes, stream['id'])
+    i_id = cast(int, stream['id'])
+    sender_key = cast(bytes, stream['sender']) + b':' + b_id
+    recipient_key = cast(bytes, stream['recipient']) + b':' + b_id
+
+    stream_json = cast(str, json_serialize(stream))
+
+    put(b'streams/' + b_id, stream_json)
+    put(b'bysender/' + sender_key, i_id)
+    put(b'byrecipient/' + recipient_key, i_id)
+
+    on_create(stream_json)
 
 
 def getAmountAvailableForWithdrawal(stream: Dict[str, Any]) -> int:
@@ -145,17 +172,17 @@ def verify() -> bool:
 
 
 @public 
-def getStream(stream_id: str) -> str:
+def getStream(stream_id: int) -> str:
     """
     Return a stream object as JSON string
 
     Args:
-        stream_id (str): Stream ID
+        stream_id (bytes): Stream ID
 
     Returns:
         str: JSON-serialized stream object
     """    
-    return cast(str, get(concat('streams/', stream_id)))
+    return cast(str, get(b'streams/' + stream_id.to_bytes()))
 
 
 @public
@@ -172,7 +199,7 @@ def getSenderStreams(sender: str) -> Iterator:
     Yields:
         Iterator: Stream IDs
     """    
-    return find(concat('bysender/', sender))
+    return find('bysender/' + sender)
 
 
 @public
@@ -189,17 +216,17 @@ def getRecipientStreams(recipient: str) -> Iterator:
     Yields:
         Iterator: Stream IDs
     """    
-    return find(concat('byrecipient/', recipient))
+    return find('byrecipient/' + recipient)
 
 
 @public
-def withdraw(stream_id: str, amount: int) -> bool:
+def withdraw(stream_id: int, amount: int) -> bool:
     """
     Withdraw funds from contract to recipient. Can be triggered by
     either recipient or sender
 
     Args:
-        stream_id (str): Stream ID
+        stream_id (int): Stream ID
         amount (int): Amount to withdraw
 
     Returns:
@@ -232,21 +259,21 @@ def withdraw(stream_id: str, amount: int) -> bool:
         deleteStream(stream)
         on_complete(cast(int, stream['id']))
     else:
-        put(concat('streams/', cast(str, stream['id'])), json_serialize(stream))
+        put(b'streams/' + cast(bytes, stream['id']), json_serialize(stream))
 
     on_withdraw(cast(int, stream['id']), cast(str, requester), amount)
     return True
 
 
 @public
-def cancelStream(stream_id: str) -> bool:
+def cancelStream(stream_id: int) -> bool:
     """
     Cancel stream and make final disbursal of funds from contract
     to recipient and remainder to sender. Can be triggered by
     either recipient or sender
 
     Args:
-        stream_id (str): Stream ID
+        stream_id (int): Stream ID
 
     Returns:
         bool: Success or failure
@@ -284,9 +311,7 @@ def onNEP17Payment(t_from: UInt160, t_amount: int, data: List[Any]):
         t_amount (int): Amount of GAS sent
         data (List[Any]): Parameters for operations
     """    
-    # TODO: FIXME - set to true for debugging only
-    #if calling_script_hash == GAS:
-    if True:
+    if calling_script_hash == GAS:
         assert len(t_from) == 20, 'invalid address'
         assert t_amount > 0, 'no funds transferred'
 
@@ -309,25 +334,13 @@ def onNEP17Payment(t_from: UInt160, t_amount: int, data: List[Any]):
 
             stream = newStream()
 
-            # TODO: removeme
-            sid = cast(int, stream['id'])
-            on_cancel(sid)
-
             stream['start'] = start_time
             stream['stop'] = stop_time
             stream['deposit'] = t_amount
             stream['remaining'] = t_amount
             stream['sender'] =  base64_encode(t_from)
             stream['recipient'] = base64_encode(recipient)
-            stream_json = cast(str, json_serialize(stream))
-            put(concat('streams/', cast(str, stream['id'])), stream_json)
 
-            sender_key = concat(cast(str, stream['sender']), cast(str, stream['id']))
-            recipient_key = concat(cast(str, stream['recipient']), cast(str, stream['id']))
-            put(concat('bysender/', sender_key), cast(int, stream['id']))
-            put(concat('byrecipient/', recipient_key), cast(int, stream['id']))
-
-            on_create(stream_json)
-
+            saveStream(stream)
             return
     abort()
