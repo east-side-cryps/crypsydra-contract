@@ -20,6 +20,7 @@ def manifest_metadata() -> NeoMetadata:
 # structure of stream object
 """
 stream = {
+    id: int,
     deposit: int,
     remaining: int,
     sender: str,
