@@ -1,10 +1,11 @@
-from boa3.builtin import NeoMetadata, metadata, public
+from boa3.builtin import NeoMetadata, metadata, public, CreateNewEvent
 from boa3.builtin.contract import Nep17TransferEvent, abort
 from boa3.builtin.interop.contract import GAS, call_contract
+from boa3.builtin.interop.iterator import Iterator
 from boa3.builtin.interop.runtime import calling_script_hash, executing_script_hash, get_time, check_witness
 from boa3.builtin.interop.binary import base64_encode, base64_decode
 from boa3.builtin.interop.json import json_serialize, json_deserialize
-from boa3.builtin.interop.storage import get, put
+from boa3.builtin.interop.storage import get, put, delete, find
 from boa3.builtin.type import UInt160
 from typing import Any, List, Dict, cast
 
@@ -16,24 +17,7 @@ def manifest_metadata() -> NeoMetadata:
     meta.email = "joe@coz.io"
     return meta
 
-on_transfer = Nep17TransferEvent
-
-
-def concat(a: str, b: str) -> str:
-    return a + b
-
-
-@public
-def verify() -> bool:
-    """
-    Executed by the verification trigger when a spend transaction references 
-    the contract as sender. Always returns false in this contract
-
-    Returns:
-        bool: False
-    """    
-    return False
-
+# structure of stream object
 """
 stream = {
     deposit: int,
@@ -45,7 +29,51 @@ stream = {
 }
 """
 
+# Events
+on_transfer = Nep17TransferEvent
+
+on_create = CreateNewEvent(
+    [
+        ('stream', str),
+    ],
+    'StreamCreated'
+)
+
+on_complete = CreateNewEvent(
+    [
+        ('stream_id', int),
+    ],
+    'StreamCompleted'
+)
+
+on_cancel = CreateNewEvent(
+    [
+        ('stream_id', int),
+    ],
+    'StreamCanceled'
+)
+on_withdraw = CreateNewEvent(
+    [
+        ('stream_id', int),
+        ('requester', str),
+        ('amount', int),
+    ],
+    'Withdraw'
+)
+
+# private functions
+
+def concat(a: str, b: str) -> str:
+    return a + b
+
+
 def newStream() -> Dict[str, Any]:
+    """
+    Create an empty stream object with the next ID in the sequence
+
+    Returns:
+        Dict[str, Any]: Stream object
+    """    
     new_id = get('streams/last_id').to_int() + 1
     put('streams/last_id', new_id)
     stream = {'id': new_id}
@@ -60,7 +88,7 @@ def loadStream(stream_id: str) -> Dict[str, Any]:
         stream_id (str): Stream ID
 
     Returns:
-        Dict[str, Any]: Deserialized sale object
+        Dict[str, Any]: Deserialized stream object
     """    
     s = get('streams/' + stream_id)
     assert len(s) > 0, 'no such stream exists'
@@ -68,18 +96,25 @@ def loadStream(stream_id: str) -> Dict[str, Any]:
     assert stream, 'stream deserialization failure'
     return stream
 
-@public 
-def getStream(stream_id: str) -> str:
-    return get(concat('streams/', stream_id))
 
-@public
-def withdraw(stream_id: str, amount: int) -> bool:
-    stream = loadStream(stream_id)
-    recipient = base64_decode(cast(str,stream['recipient']))
-    assert check_witness(recipient), 'recipient signature not found'
+def deleteStream(stream: Dict[str, Any]):
+        delete(concat('streams/', cast(str, stream['id'])))
+        sender_key = concat(cast(str, stream['sender']), cast(str, stream['id']))
+        recipient_key = concat(cast(str, stream['recipient']), cast(str, stream['id']))
+        delete(concat('bysender/', sender_key))
+        delete(concat('byrecipient/', recipient_key))
 
-    # calculate maximum amount that can be withdrawn at this time
-        
+
+def getAmountAvailableForWithdrawal(stream: Dict[str, Any]) -> int:
+    """
+    Calculate the maximum amount that can be withdrawn at this time
+
+    Args:
+        stream (Dict[str, Any]): Stream object
+
+    Returns:
+        int: amount that can be withdrawn
+    """    
     current_time = get_time
     start_time = cast(int, stream['start'])
     stop_time = cast(int, stream['stop'])
@@ -87,13 +122,105 @@ def withdraw(stream_id: str, amount: int) -> bool:
     remaining = cast(int, stream['remaining'])
 
     if current_time >= stop_time:
-        available = remaining
+        return remaining
     else:
         total_seconds = (stop_time - start_time) // 1000
         rate = deposit // total_seconds
 
         elapsed_seconds = (current_time - start_time) // 1000
-        available = rate * elapsed_seconds
+        return rate * elapsed_seconds
+
+# public functions
+
+@public
+def verify() -> bool:
+    """
+    Executed by the verification trigger when a spend transaction references 
+    the contract as sender. Always returns false in this contract
+
+    Returns:
+        bool: False
+    """    
+    return False
+
+
+@public 
+def getStream(stream_id: str) -> str:
+    """
+    Return a stream object as JSON string
+
+    Args:
+        stream_id (str): Stream ID
+
+    Returns:
+        str: JSON-serialized stream object
+    """    
+    return cast(str, get(concat('streams/', stream_id)))
+
+
+@public
+def getSenderStreams(sender: str) -> Iterator:
+    """
+    Get all streams where address is sender
+
+    Args:
+        sender (str): address as base64-encoded scripthash
+
+    Returns:
+        int: Stream ID
+
+    Yields:
+        Iterator: Stream IDs
+    """    
+    return find(concat('bysender/', sender))
+
+
+@public
+def getRecipientStreams(recipient: str) -> Iterator:
+    """
+    Get all streams where address is recipient
+
+    Args:
+        recipient (str): address as base64-encoded scripthash
+
+    Returns:
+        int: Stream ID
+
+    Yields:
+        Iterator: Stream IDs
+    """    
+    return find(concat('byrecipient/', recipient))
+
+
+@public
+def withdraw(stream_id: str, amount: int) -> bool:
+    """
+    Withdraw funds from contract to recipient. Can be triggered by
+    either recipient or sender
+
+    Args:
+        stream_id (str): Stream ID
+        amount (int): Amount to withdraw
+
+    Returns:
+        bool: Success or failure
+    """    
+    stream = loadStream(stream_id)
+    recipient = base64_decode(cast(str,stream['recipient']))
+    sender = base64_decode(cast(str, stream['sender']))
+    if check_witness(recipient):
+        print("Recipient requesting withdrawal")
+        requester = stream['recipient']
+    elif check_witness(sender):
+        # TODO: should sender be able to request an advance to recipient?
+        print("Sender requesting withdrawal to recipient")
+        requester = stream['sender']
+    else:
+        print("Must be sender or recipient to withdraw")
+        abort()
+
+    remaining = cast(int, stream['remaining'])
+    available = getAmountAvailableForWithdrawal(stream)
 
     assert available >= amount, 'withdrawal amount exceeds available funds'
 
@@ -101,7 +228,49 @@ def withdraw(stream_id: str, amount: int) -> bool:
 
     call_contract(GAS, 'transfer', [executing_script_hash, recipient, amount, None])
 
-    put(concat('streams/', cast(str, stream['id'])), json_serialize(stream))
+    if cast(int, stream['remaining']) == 0:
+        deleteStream(stream)
+        on_complete(cast(int, stream['id']))
+    else:
+        put(concat('streams/', cast(str, stream['id'])), json_serialize(stream))
+
+    on_withdraw(cast(int, stream['id']), cast(str, requester), amount)
+    return True
+
+
+@public
+def cancelStream(stream_id: str) -> bool:
+    """
+    Cancel stream and make final disbursal of funds from contract
+    to recipient and remainder to sender. Can be triggered by
+    either recipient or sender
+
+    Args:
+        stream_id (str): Stream ID
+
+    Returns:
+        bool: Success or failure
+    """    
+    stream = loadStream(stream_id)
+    recipient = base64_decode(cast(str,stream['recipient']))
+    sender = base64_decode(cast(str, stream['sender']))
+    if check_witness(recipient):
+        print("Recipient requesting cancellation of stream")
+    elif check_witness(sender):
+        print("Sender requesting cancellation of stream")
+    else:
+        print("Must be sender or recipient to cancel stream")
+        abort()
+
+    available = getAmountAvailableForWithdrawal(stream)
+    remaining = cast(int, stream['remaining']) - available
+
+    call_contract(GAS, 'transfer', [executing_script_hash, recipient, available, None])
+    call_contract(GAS, 'transfer', [executing_script_hash, sender, remaining, None])
+
+    deleteStream(stream)
+    on_cancel(cast(int, stream['id']))
+
     return True
 
 
@@ -115,7 +284,9 @@ def onNEP17Payment(t_from: UInt160, t_amount: int, data: List[Any]):
         t_amount (int): Amount of GAS sent
         data (List[Any]): Parameters for operations
     """    
-    if calling_script_hash == GAS:
+    # TODO: FIXME - set to true for debugging only
+    #if calling_script_hash == GAS:
+    if True:
         assert len(t_from) == 20, 'invalid address'
         assert t_amount > 0, 'no funds transferred'
 
@@ -138,14 +309,25 @@ def onNEP17Payment(t_from: UInt160, t_amount: int, data: List[Any]):
 
             stream = newStream()
 
+            # TODO: removeme
+            sid = cast(int, stream['id'])
+            on_cancel(sid)
+
             stream['start'] = start_time
             stream['stop'] = stop_time
             stream['deposit'] = t_amount
             stream['remaining'] = t_amount
             stream['sender'] =  base64_encode(t_from)
             stream['recipient'] = base64_encode(recipient)
+            stream_json = cast(str, json_serialize(stream))
+            put(concat('streams/', cast(str, stream['id'])), stream_json)
 
-            put(concat('streams/', cast(str, stream['id'])), json_serialize(stream))
+            sender_key = concat(cast(str, stream['sender']), cast(str, stream['id']))
+            recipient_key = concat(cast(str, stream['recipient']), cast(str, stream['id']))
+            put(concat('bysender/', sender_key), cast(int, stream['id']))
+            put(concat('byrecipient/', recipient_key), cast(int, stream['id']))
+
+            on_create(stream_json)
 
             return
     abort()
