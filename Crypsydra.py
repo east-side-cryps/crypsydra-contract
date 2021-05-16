@@ -12,9 +12,10 @@ from typing import Any, List, Dict, cast
 @metadata
 def manifest_metadata() -> NeoMetadata:
     meta = NeoMetadata()
-    meta.author = "Joe Stewart"
-    meta.description = "Streaming Payments"
-    meta.email = "joe@coz.io"
+    meta.author = ""
+    meta.name = "Crypsydra"
+    meta.description = ""
+    meta.email = ""
     return meta
 
 # structure of stream object
@@ -87,7 +88,8 @@ def loadStream(stream_id: int) -> Dict[str, Any]:
 
     Returns:
         Dict[str, Any]: Deserialized stream object
-    """    
+    """ 
+    stream_key = b'streams/' + stream_id.to_bytes()    
     s = get(b'streams/' + stream_id.to_bytes())
     assert len(s) > 0, 'no such stream exists'
     stream: Dict[str, Any] = json_deserialize(s)
@@ -146,6 +148,10 @@ def getAmountAvailableForWithdrawal(stream: Dict[str, Any]) -> int:
     """    
     current_time = get_time
     start_time = cast(int, stream['start'])
+
+    if current_time < start_time:
+        return 0
+
     stop_time = cast(int, stream['stop'])
     deposit = cast(int, stream['deposit'])
     remaining = cast(int, stream['remaining'])
@@ -158,6 +164,7 @@ def getAmountAvailableForWithdrawal(stream: Dict[str, Any]) -> int:
 
         elapsed_seconds = (current_time - start_time) // 1000
         return rate * elapsed_seconds
+    return 0  # bug in neo3-boa, won't compile without this
 
 
 # public functions
@@ -264,7 +271,7 @@ def withdraw(stream_id: int, amount: int) -> bool:
         deleteStream(stream)
         on_complete(stream_id)
     else:
-        put(b'streams/' + cast(bytes, stream['id']), json_serialize(stream))
+        put(b'streams/' + stream_id.to_bytes(), json_serialize(stream))
 
 
     on_withdraw(stream_id, requester, amount)
@@ -339,7 +346,7 @@ def onNEP17Payment(t_from: UInt160, t_amount: int, data: List[Any]):
             current_time = get_time
 
             assert len(recipient) == 20, 'invalid recipient scripthash'
-            assert start_time >= current_time, 'start time cannot be in the past'
+            # assert start_time >= current_time, 'start time cannot be in the past'
             assert stop_time > start_time, 'stop time must be greater than start time'
 
             stream = newStream()
