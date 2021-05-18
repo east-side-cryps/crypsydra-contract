@@ -32,8 +32,6 @@ stream = {
 """
 
 # Events
-on_transfer = Nep17TransferEvent
-
 on_create = CreateNewEvent(
     [
         ('stream', str)
