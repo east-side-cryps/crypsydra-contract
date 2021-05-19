@@ -148,7 +148,7 @@ def getAmountAvailableForWithdrawal(stream: Dict[str, Any]) -> int:
     start_time = cast(int, stream['start'])
 
     if current_time < start_time:
-        return 0
+        return 0  
 
     stop_time = cast(int, stream['stop'])
     deposit = cast(int, stream['deposit'])
@@ -157,11 +157,12 @@ def getAmountAvailableForWithdrawal(stream: Dict[str, Any]) -> int:
     if current_time >= stop_time:
         return remaining
     else:
-        total_seconds = (stop_time - start_time) // 1000
-        rate = deposit // total_seconds
+        elapsed_time = current_time - start_time
+        total_time = stop_time - start_time
+        prorated = deposit * elapsed_time // total_time
+        # subtract any funds already withdrawn
+        return prorated - (deposit - remaining)
 
-        elapsed_seconds = (current_time - start_time) // 1000
-        return rate * elapsed_seconds
     return 0  # bug in neo3-boa, won't compile without this
 
 
