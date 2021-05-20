@@ -115,7 +115,7 @@ Return a stream object as JSON string
 
 ```python
 @public
-getSenderStreams(sender: str) -> Iterator
+getSenderStreams(sender: str) -> str
 ```
 
 Get all streams where address is sender
@@ -127,19 +127,14 @@ Get all streams where address is sender
 
 **Returns**:
 
-- `int` - Stream ID
+- `str` - JSON array of stream IDs
   
-
-**Yields**:
-
-- `Iterator` - Stream IDs
-
 <a name="Crypsydra.getRecipientStreams"></a>
 #### getRecipientStreams
 
 ```python
 @public
-getRecipientStreams(recipient: str) -> Iterator
+getRecipientStreams(recipient: str) -> str
 ```
 
 Get all streams where address is recipient
@@ -151,13 +146,8 @@ Get all streams where address is recipient
 
 **Returns**:
 
-- `int` - Stream ID
+- `str` - JSON array of stream IDs
   
-
-**Yields**:
-
-- `Iterator` - Stream IDs
-
 <a name="Crypsydra.withdraw"></a>
 #### withdraw
 
