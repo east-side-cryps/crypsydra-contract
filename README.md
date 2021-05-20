@@ -115,14 +115,14 @@ Return a stream object as JSON string
 
 ```python
 @public
-getSenderStreams(sender: str) -> str
+getSenderStreams(sender: UInt160) -> str
 ```
 
 Get all streams where address is sender
 
 **Arguments**:
 
-- `sender` _str_ - address as base64-encoded scripthash
+- `sender` _UInt160_ - address as UInt160
   
 
 **Returns**:
@@ -134,15 +134,14 @@ Get all streams where address is sender
 
 ```python
 @public
-getRecipientStreams(recipient: str) -> str
+getRecipientStreams(recipient: UInt160) -> str
 ```
 
 Get all streams where address is recipient
 
 **Arguments**:
 
-- `recipient` _str_ - address as base64-encoded scripthash
-  
+- `recipient` _UInt160_ - address as UInt160
 
 **Returns**:
 
