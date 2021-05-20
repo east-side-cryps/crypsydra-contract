@@ -3,7 +3,7 @@ from boa3.builtin.contract import Nep17TransferEvent, abort
 from boa3.builtin.interop.contract import GAS, call_contract
 from boa3.builtin.interop.iterator import Iterator
 from boa3.builtin.interop.runtime import calling_script_hash, executing_script_hash, get_time, check_witness
-from boa3.builtin.interop.binary import base64_encode, base64_decode
+from boa3.builtin.interop.binary import base64_encode, base64_decode, itoa
 from boa3.builtin.interop.json import json_serialize, json_deserialize
 from boa3.builtin.interop.storage import get, put, delete, find
 from boa3.builtin.type import UInt160
@@ -195,7 +195,7 @@ def getStream(stream_id: int) -> str:
 
 
 @public
-def getSenderStreams(sender: str) -> Iterator:
+def getSenderStreams(sender: str) -> str:
     """
     Get all streams where address is sender
 
@@ -203,16 +203,18 @@ def getSenderStreams(sender: str) -> Iterator:
         sender (str): address as base64-encoded scripthash
 
     Returns:
-        int: Stream ID
-
-    Yields:
-        Iterator: Stream IDs
-    """    
-    return find('bysender/' + sender)
+        str: JSON array of stream IDs
+    """
+    streams = find('bysender/' + sender)
+    ret = '['
+    while streams.next():
+        ret = ret + itoa(cast(bytes, streams.value[1]).to_int()) + ','
+    ret = ret[:-1] + ']'
+    return ret
 
 
 @public
-def getRecipientStreams(recipient: str) -> Iterator:
+def getRecipientStreams(recipient: str) -> str:
     """
     Get all streams where address is recipient
 
@@ -220,12 +222,14 @@ def getRecipientStreams(recipient: str) -> Iterator:
         recipient (str): address as base64-encoded scripthash
 
     Returns:
-        int: Stream ID
-
-    Yields:
-        Iterator: Stream IDs
-    """    
-    return find('byrecipient/' + recipient)
+        str: JSON array of stream IDs
+    """
+    streams = find('byrecipient/' + recipient)
+    ret = '['
+    while streams.next():
+        ret = ret + itoa(cast(bytes, streams.value[1]).to_int()) + ','
+    ret = ret[:-1] + ']'
+    return ret
 
 
 @public
