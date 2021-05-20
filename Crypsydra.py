@@ -163,7 +163,7 @@ def getAmountAvailableForWithdrawal(stream: Dict[str, Any]) -> int:
         # subtract any funds already withdrawn
         return prorated - (deposit - remaining)
 
-    return 0  # bug in neo3-boa, won't compile without this
+    return 0  # neo3-boa won't compile without this
 
 
 # public functions
@@ -195,7 +195,7 @@ def getStream(stream_id: int) -> str:
 
 
 @public
-def getSenderStreams(sender: str) -> str:
+def getSenderStreams(sender: UInt160) -> str:
     """
     Get all streams where address is sender
 
@@ -205,16 +205,19 @@ def getSenderStreams(sender: str) -> str:
     Returns:
         str: JSON array of stream IDs
     """
-    streams = find('bysender/' + sender)
-    ret = '['
+    sender64 = base64_encode(sender)
+    streams = find('bysender/' + sender64)
+    ret = ''
     while streams.next():
         ret = ret + itoa(cast(bytes, streams.value[1]).to_int()) + ','
-    ret = ret[:-1] + ']'
-    return ret
+    if len(ret) > 0:
+        ret = '[' + ret[:-1]
+        return ret + ']'
+    return '[]'
 
 
 @public
-def getRecipientStreams(recipient: str) -> str:
+def getRecipientStreams(recipient: UInt160) -> str:
     """
     Get all streams where address is recipient
 
@@ -224,12 +227,15 @@ def getRecipientStreams(recipient: str) -> str:
     Returns:
         str: JSON array of stream IDs
     """
-    streams = find('byrecipient/' + recipient)
-    ret = '['
+    recipient64 = base64_encode(recipient)
+    streams = find('byrecipient/' + recipient64)
+    ret = ''
     while streams.next():
         ret = ret + itoa(cast(bytes, streams.value[1]).to_int()) + ','
-    ret = ret[:-1] + ']'
-    return ret
+    if len(ret) > 0:
+        ret = '[' + ret[:-1]
+        return ret + ']'
+    return '[]'
 
 
 @public
