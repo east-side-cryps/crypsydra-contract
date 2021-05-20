@@ -200,7 +200,7 @@ def getSenderStreams(sender: UInt160) -> str:
     Get all streams where address is sender
 
     Args:
-        sender (str): address as base64-encoded scripthash
+        sender (UInt160): address as UInt160
 
     Returns:
         str: JSON array of stream IDs
@@ -222,7 +222,7 @@ def getRecipientStreams(recipient: UInt160) -> str:
     Get all streams where address is recipient
 
     Args:
-        recipient (str): address as base64-encoded scripthash
+        recipient (UInt160): address as UInt160
 
     Returns:
         str: JSON array of stream IDs
