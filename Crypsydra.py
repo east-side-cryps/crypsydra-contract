@@ -1,7 +1,6 @@
 from boa3.builtin import NeoMetadata, metadata, public, CreateNewEvent
-from boa3.builtin.contract import Nep17TransferEvent, abort
+from boa3.builtin.contract import abort
 from boa3.builtin.interop.contract import GAS, call_contract
-from boa3.builtin.interop.iterator import Iterator
 from boa3.builtin.interop.runtime import calling_script_hash, executing_script_hash, get_time, check_witness
 from boa3.builtin.interop.binary import base64_encode, base64_decode, itoa
 from boa3.builtin.interop.json import json_serialize, json_deserialize
@@ -12,9 +11,9 @@ from typing import Any, List, Dict, cast
 @metadata
 def manifest_metadata() -> NeoMetadata:
     meta = NeoMetadata()
-    meta.author = ""
+    meta.author = "hal0x2328"
     meta.name = "Crypsydra"
-    meta.description = ""
+    meta.description = "Streaming payments"
     meta.email = ""
     return meta
 
